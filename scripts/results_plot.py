@@ -24,6 +24,7 @@ matplotlib is an optional dependency -- nothing else in this repo needs it:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 from pathlib import Path
 import sys
 
@@ -48,6 +49,9 @@ def main() -> int:
     ap.add_argument("--seed-offset", type=int, default=0,
                     help="plot only runs from this seed block (default 0, the "
                          "reported block; 1 is the checkpoint-selection sweep)")
+    ap.add_argument("--pattern", default=None,
+                    help="only include runs whose path matches this glob, "
+                         "e.g. '*v2*' to keep only rerun summaries")
     ap.add_argument("--output", default="sr_vs_steps.png", help="PNG to write")
     ap.add_argument("--title", default=None)
     ap.add_argument("--no-ci", dest="ci", action="store_false",
@@ -60,6 +64,12 @@ def main() -> int:
     if not rows:
         print(f"no *.summary.json under {root}", file=sys.stderr)
         return 1
+
+    if args.pattern:
+        rows = [r for r in rows if fnmatch.fnmatch(r["run"], args.pattern)]
+        if not rows:
+            print(f"no runs under {root} match pattern {args.pattern!r}", file=sys.stderr)
+            return 1
 
     rows, unattributable = select_seed_offset(rows, args.seed_offset)
     if not rows:

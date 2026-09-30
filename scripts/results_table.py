@@ -26,6 +26,7 @@ needs matplotlib.
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import re
 import sys
@@ -204,6 +205,9 @@ def main() -> int:
                          "reported block; 1 is the checkpoint-selection sweep)")
     ap.add_argument("--pivot", action="store_true",
                     help="tasks x checkpoint steps, SR%% in the cells")
+    ap.add_argument("--pattern", default=None,
+                    help="only include runs whose path matches this glob, "
+                         "e.g. '*v2*' to keep only rerun summaries")
     ap.add_argument("--json", help="also write the flat rows here")
     args = ap.parse_args()
 
@@ -212,6 +216,12 @@ def main() -> int:
     if not rows:
         print(f"no *.summary.json under {root}", file=sys.stderr)
         return 1
+
+    if args.pattern:
+        rows = [r for r in rows if fnmatch.fnmatch(r["run"], args.pattern)]
+        if not rows:
+            print(f"no runs under {root} match pattern {args.pattern!r}", file=sys.stderr)
+            return 1
 
     rows, unattributable = select_seed_offset(rows, args.seed_offset)
     if not rows:
