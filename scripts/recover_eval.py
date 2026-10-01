@@ -29,6 +29,7 @@ from pathlib import Path
 
 _STEP_RE = re.compile(r"(?:ckpt|checkpoint[-_])(\d+)")
 _SEED_RE = re.compile(r"seed(\d+)")
+_TASK_PREFIX_RE = re.compile(r"^(?!seed\d)(.+?)-(?:ckpt|checkpoint[-_])\d+")
 
 # Keys summarize() computes; everything else in an existing summary.json is
 # run-level context worth carrying forward. Mirrors run_eval.py:390.
@@ -139,15 +140,21 @@ def find_fragments(roots: list[Path]) -> tuple[dict[tuple, list[Path]], list[Pat
     unmatched: list[Path] = []
     seen: set[Path] = set()
     for root in roots:
-        for path in sorted(root.rglob("*.jsonl")):
+        paths = sorted(set(root.rglob("*.jsonl")) | {
+            p for p in root.rglob("*.json") if not p.name.endswith(".summary.json")})
+        for path in paths:
             resolved = path.resolve()
             if resolved in seen:      # same file reached through two roots
                 continue
             seen.add(resolved)
             step = _STEP_RE.search(path.stem)
             seed = _SEED_RE.search(path.stem)
-            task = path.parent.name
-            variant = path.parent.parent.name
+            # `<variant>/<task>-ckpt<N>-seed<S>.json` (flat) or `<variant>/<task>/...` (nested).
+            prefix = _TASK_PREFIX_RE.match(path.stem)
+            if prefix and path.parent.name != prefix.group(1):
+                task, variant = prefix.group(1), path.parent.name
+            else:
+                task, variant = path.parent.name, path.parent.parent.name
             if not step or not seed:
                 unmatched.append(path)
                 continue
@@ -214,7 +221,7 @@ def video_seeds(raw_dir: Path, task: str) -> set[int]:
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("roots", nargs="+", help="directories to scan for *.jsonl")
+    ap.add_argument("roots", nargs="+", help="directories to scan for *.jsonl / *.json")
     ap.add_argument("--episodes", type=int, default=100, help="scored episodes a run targets")
     ap.add_argument("--raw-dir", help="eval_result/raw, to cross-check against rendered videos")
     ap.add_argument("--write", action="store_true",
